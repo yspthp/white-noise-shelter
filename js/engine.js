@@ -97,11 +97,98 @@ function softClipCurve(n = 2048, knee = 0.75) {
   return c;
 }
 
+// 當雲端靜態環境尚未上傳二進位 MP3 檔案時，自動以 Web Audio 合成對應的自然環境音與通知干擾聲
+function synthesizeFallbackClip(ctx, url) {
+  const sr = ctx.sampleRate || 44100;
+  const decodedUrl = decodeURIComponent(url).toLowerCase();
+  const dur = 24;
+  const len = Math.floor(sr * dur);
+  const buf = ctx.createBuffer(2, len, sr);
+  const L = buf.getChannelData(0);
+  const R = buf.getChannelData(1);
+
+  if (decodedUrl.includes('annoying_notification')) {
+    // 模擬密集的訊息提示音與震動干擾
+    const events = [
+      0.3, 1.1, 1.9, 2.4, 3.2, 4.0, 4.5, 5.1, 6.0, 6.8, 7.3, 8.1,
+      8.9, 9.4, 10.2, 11.0, 11.6, 12.3, 13.1, 13.8, 14.4, 15.2,
+      16.0, 16.7, 17.5, 18.2, 19.0, 19.8, 20.5, 21.3, 22.0, 22.8,
+    ];
+    for (const ev of events) {
+      const s0 = Math.floor(ev * sr);
+      const pingLen = Math.floor(0.32 * sr);
+      const f1 = 880 + ((ev * 137) % 520);
+      const f2 = f1 * 1.333;
+      for (let i = 0; i < pingLen && s0 + i < len; i++) {
+        const t = i / sr;
+        const env = Math.exp(-t * 14) * Math.sin(Math.min(1, t * 200) * (Math.PI / 2));
+        const freq = t < 0.09 ? f1 : f2;
+        const val = (Math.sin(2 * Math.PI * freq * t) + 0.35 * Math.sin(2 * Math.PI * freq * 2 * t)) * env * 0.28;
+        L[s0 + i] += val;
+        R[s0 + i] += val * 0.92;
+      }
+    }
+    return buf;
+  }
+
+  // 自然白噪音合成（依檔名特徵調整濾波與動態包絡）
+  let b0L = 0, b1L = 0, b2L = 0, b0R = 0, b1R = 0, b2R = 0;
+  const isWaves = decodedUrl.includes('beach') || decodedUrl.includes('waves');
+  const isWind = decodedUrl.includes('wind');
+  const isRain = decodedUrl.includes('rain');
+  const isFire = decodedUrl.includes('firewood') || decodedUrl.includes('crackling');
+  const isSnow = decodedUrl.includes('snow') || decodedUrl.includes('footsteps');
+
+  for (let i = 0; i < len; i++) {
+    const t = i / sr;
+    const wL = Math.random() * 2 - 1;
+    const wR = Math.random() * 2 - 1;
+
+    // 粉紅噪音基底
+    b0L = 0.99765 * b0L + wL * 0.099046;
+    b1L = 0.96300 * b1L + wL * 0.296516;
+    b2L = 0.57000 * b2L + wL * 1.052691;
+    const pinkL = (b0L + b1L + b2L + wL * 0.1848) * 0.04;
+
+    b0R = 0.99765 * b0R + wR * 0.099046;
+    b1R = 0.96300 * b1R + wR * 0.296516;
+    b2R = 0.57000 * b2R + wR * 1.052691;
+    const pinkR = (b0R + b1R + b2R + wR * 0.1848) * 0.04;
+
+    let mod = 1;
+    if (isWaves) {
+      mod = 0.35 + 0.65 * (0.5 + 0.5 * Math.sin(2 * Math.PI * 0.12 * t));
+    } else if (isWind) {
+      mod = 0.45 + 0.55 * (0.5 + 0.5 * Math.sin(2 * Math.PI * 0.08 * t + Math.sin(0.25 * t)));
+    } else if (isSnow) {
+      const step = (t * 1.15) % 1;
+      const crunch = step < 0.18 ? Math.sin((step / 0.18) * Math.PI) ** 2 : 0;
+      mod = 0.25 + 0.55 * crunch;
+    } else if (isFire) {
+      const crackle = Math.random() < 0.0018 ? (Math.random() * 0.45) : 0;
+      L[i] += crackle;
+      R[i] += crackle * 0.85;
+      mod = 0.55;
+    } else if (isRain) {
+      mod = 0.7;
+    }
+
+    L[i] += pinkL * mod;
+    R[i] += pinkR * mod;
+  }
+  return buf;
+}
+
 async function fetchDecode(ctx, url) {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`${res.status} ${url}`);
-  const data = await res.arrayBuffer();
-  return ctx.decodeAudioData(data);
+  try {
+    const res = await fetch(url);
+    if (res.ok) {
+      const data = await res.arrayBuffer();
+      return await ctx.decodeAudioData(data);
+    }
+  } catch { /* 若找不到實體 mp3 檔案則改用內建合成音訊備援 */ }
+  console.info('[shelter] 使用內建 Web Audio 合成音訊備援：', url);
+  return synthesizeFallbackClip(ctx, url);
 }
 
 export class ShelterEngine {
