@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>白噪音庇護所｜騰出三分鐘安靜</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+TC:wght@400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <canvas id="line" aria-hidden="true"></canvas>
+
+  <main>
+    <section id="intro" class="scene is-active">
+      <h1>騰出三分鐘安靜</h1>
+      <p class="lead">請戴上耳機。</p>
+      <button id="play" class="play" type="button" disabled>正在準備聲音</button>
+    </section>
+
+    <section id="journey" class="scene">
+      <p id="caption" class="caption" aria-live="polite"></p>
+    </section>
+
+    <section id="outro" class="scene">
+      <p class="closing">安靜，是為了重新聽見自己。</p>
+      <blockquote>
+        <p class="verse">你們要休息，要知道我是神。</p>
+        <cite>詩篇 四十六章十節</cite>
+      </blockquote>
+      <button id="again" class="text-btn" type="button">再聽一次</button>
+    </section>
+
+    <section id="error" class="scene">
+      <h2>尚未找到聲音素材</h2>
+      <p id="error-detail" class="lead">請確認檔案路徑。</p>
+      <ul class="paths">
+        <li><code>audio/annoying_notification.mp3</code></li>
+        <li><code>audio/shelter/</code>（放入白噪音 mp3）</li>
+      </ul>
+      <button id="retry" class="text-btn" type="button">放好了，再試一次</button>
+    </section>
+
+    <button id="end" class="end-btn" type="button">結束</button>
+  </main>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>
