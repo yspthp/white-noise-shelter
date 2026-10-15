@@ -28,12 +28,22 @@ export const CONFIG = {
   },
 
   // 旅程中的文字（time / dur 為秒）
+  // pinUntilEnd: 出現後持續保留在畫面上，直到準備出現「安靜，是為了重新聽見自己」前才清空
+  // nextLine: 在主句出現後（延遲 nextLineDelay 秒）於下一行浮現並同樣保留至結束
+  // belowPinned: 依次序出現在「請慢慢合上雙眼。」下方，按原定時間出現並在 dur 秒後緩緩消失
   captions: [
     { time: 2, dur: 8, text: '這些，是每天圍繞著你的聲音。' },
     { time: 11, dur: 9, text: '你的注意力，被什麼奪去了嗎？' },
     { time: 23, dur: 10, text: '讓它們，慢慢走遠。' },
-    { time: 46, dur: 10, text: '現在，只剩下安靜。' },
-    { time: 88, dur: 10, text: '不用回應，也不用趕。' },
-    { time: 124, dur: 11, text: '聽一聽，自己的呼吸。' },
+    {
+      time: 46,
+      dur: 10,
+      text: '現在，只剩下安靜。',
+      pinUntilEnd: true,
+      nextLine: '請慢慢合上雙眼。',
+      nextLineDelay: 2.5,
+    },
+    { time: 88, dur: 10, belowPinned: true, text: '不用回應，也不用趕。' },
+    { time: 124, dur: 11, belowPinned: true, text: '聽一聽，自己的呼吸。' },
   ],
 };

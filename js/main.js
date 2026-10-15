@@ -9,6 +9,8 @@ const line = new Line($('line'));
 
 const playBtn = $('play');
 const caption = $('caption');
+const captionEyes = $('caption-eyes');
+const captionSub = $('caption-sub');
 
 let engine = null;
 let rafId = 0;
@@ -16,6 +18,12 @@ let rafId = 0;
 function show(name) {
   for (const s of scenes) $(s).classList.toggle('is-active', s === name);
   document.body.classList.toggle('is-listening', name === 'journey');
+}
+
+function clearCaptions() {
+  caption.classList.remove('is-shown');
+  if (captionEyes) captionEyes.classList.remove('is-shown');
+  if (captionSub) captionSub.classList.remove('is-shown');
 }
 
 function fail(detail) {
@@ -67,6 +75,15 @@ async function scanDirectoryListing() {
 }
 
 async function prepare() {
+  if (engine) {
+    engine.dispose();
+    engine = null;
+  }
+  clearCaptions();
+  caption.textContent = '';
+  if (captionEyes) captionEyes.textContent = '';
+  if (captionSub) captionSub.textContent = '';
+
   show('intro');
   line.setPhase(1);
   line.setPresence(0.3);
@@ -107,6 +124,7 @@ async function prepare() {
 function begin() {
   if (!engine || playBtn.disabled) return;
   playBtn.disabled = true;
+  clearCaptions();
   show('journey');
   // 有干擾聲：線立刻進入顫動狀態；沒有：直接從平靜開始
   line.setPhase(engine.noise ? 0 : 0.6, true);
@@ -119,6 +137,7 @@ function begin() {
 
 // 依時間軸驅動線條狀態與字幕
 function track() {
+  if (!engine) return;
   const { timeline: T, captions } = CONFIG;
   const t = engine.elapsed;
 
@@ -134,17 +153,51 @@ function track() {
 
   // 沒有干擾聲時，跳過描述干擾聲的字幕
   const list = engine.noise ? captions : captions.filter((c) => c.time >= T.noiseRecedeEnd);
-  const cur = list.find((c) => t >= c.time && t < c.time + c.dur);
-  if (cur && caption.textContent !== cur.text) caption.textContent = cur.text;
-  caption.classList.toggle('is-shown', Boolean(cur));
-  caption.classList.toggle('is-warm', !engine.noise || t >= T.noiseRecedeStart + 4);
+  const pinnedItem = list.find((c) => c.pinUntilEnd);
+  // 在準備進入完成頁（「安靜，是為了重新聽見自己。」）前清空整個旅程頁面文字
+  const clearBeforeOutroAt = T.total - 3.2;
+
+  if (t >= clearBeforeOutroAt) {
+    clearCaptions();
+  } else if (pinnedItem && t >= pinnedItem.time) {
+    // 1. 「現在，只剩下安靜。」持續保留在第一行
+    if (caption.textContent !== pinnedItem.text) caption.textContent = pinnedItem.text;
+    caption.classList.add('is-shown', 'is-warm');
+
+    // 2. 下一行加上「請慢慢合上雙眼。」，同樣持續保留至準備進入完成頁前
+    if (captionEyes && pinnedItem.nextLine) {
+      if (captionEyes.textContent !== pinnedItem.nextLine) captionEyes.textContent = pinnedItem.nextLine;
+      const eyesAt = pinnedItem.time + (pinnedItem.nextLineDelay ?? 2.5);
+      captionEyes.classList.toggle('is-shown', t >= eyesAt);
+    }
+
+    // 3. 之後所有出現的文案，依次序出現在「請慢慢合上雙眼。」下方，按原定時間出現並在 dur 後緩緩消失
+    if (captionSub) {
+      const subItem = list.find((c) => c.belowPinned && t >= c.time && t < c.time + c.dur);
+      if (subItem && captionSub.textContent !== subItem.text) {
+        captionSub.textContent = subItem.text;
+      }
+      captionSub.classList.toggle('is-shown', Boolean(subItem));
+    }
+  } else {
+    // 46 秒之前的引導字幕：單行依序浮現與淡出
+    const earlyItem = list.find((c) => !c.pinUntilEnd && !c.belowPinned && t >= c.time && t < c.time + c.dur);
+    if (earlyItem && caption.textContent !== earlyItem.text) caption.textContent = earlyItem.text;
+    caption.classList.toggle('is-shown', Boolean(earlyItem));
+    caption.classList.toggle('is-warm', !engine.noise || t >= T.noiseRecedeStart + 4);
+    if (captionEyes) captionEyes.classList.remove('is-shown');
+    if (captionSub) captionSub.classList.remove('is-shown');
+  }
 
   if (!engine.ended) rafId = requestAnimationFrame(track);
 }
 
 function complete() {
   cancelAnimationFrame(rafId);
-  caption.classList.remove('is-shown');
+  clearCaptions();
+  caption.textContent = '';
+  if (captionEyes) captionEyes.textContent = '';
+  if (captionSub) captionSub.textContent = '';
   line.setLevel(0);
   line.setPresence(0);
   show('outro');
@@ -156,6 +209,18 @@ $('retry').addEventListener('click', prepare);
 $('again').addEventListener('click', prepare);
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && document.body.classList.contains('is-listening') && engine) engine.stop();
+});
+
+// 從背景切回前景或喚醒螢幕時，立即同步當前播放進度與畫面狀態
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && engine) {
+    if (engine.ended || engine.elapsed >= CONFIG.timeline.total) {
+      complete();
+    } else if (document.body.classList.contains('is-listening')) {
+      cancelAnimationFrame(rafId);
+      track();
+    }
+  }
 });
 
 prepare();
